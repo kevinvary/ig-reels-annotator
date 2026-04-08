@@ -86,6 +86,92 @@ body.iga-panel-collapsed {
   border-radius: 10px;
 }
 
+/* API Status & Config */
+.iga-status { font-size: 10px; cursor: default; }
+.iga-config-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.iga-config-btn:hover { opacity: 1; }
+
+.iga-config {
+  padding: 12px 16px;
+  border-bottom: 1px solid #262626;
+  flex-shrink: 0;
+}
+.iga-input {
+  width: 100%;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #e0e0e0;
+  padding: 8px 10px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+  margin-bottom: 6px;
+}
+.iga-input:focus { border-color: #e1306c; }
+.iga-input::placeholder { color: #555; }
+
+.iga-save-config-btn, .iga-test-config-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+}
+.iga-save-config-btn {
+  background: linear-gradient(135deg, #e1306c, #c13584);
+  color: #fff;
+}
+.iga-test-config-btn {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #e0e0e0;
+}
+.iga-save-config-btn:hover { opacity: 0.9; }
+.iga-test-config-btn:hover { background: #222; }
+
+.iga-config-msg {
+  font-size: 11px;
+  margin-top: 8px;
+  min-height: 16px;
+}
+
+/* Toast notifications */
+.iga-toast {
+  position: absolute;
+  bottom: 20px;
+  left: 16px;
+  right: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 100000;
+  animation: iga-toast-in 0.3s ease, iga-toast-out 0.3s ease 2.7s forwards;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+@keyframes iga-toast-in {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes iga-toast-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 /* Current reel info */
 .iga-reel-info {
   padding: 12px 16px;

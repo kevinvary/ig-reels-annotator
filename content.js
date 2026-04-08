@@ -1,4 +1,4 @@
-// IG Reels Annotator — Content Script
+// IG Reels Annotator — Content Script (connected to IG Tracker API)
 (function () {
   'use strict';
 
@@ -6,6 +6,7 @@
 
   // --- Storage ---
   const STORAGE_KEY = 'iga_annotations';
+  const CONFIG_KEY = 'iga_config'; // { apiUrl, token }
 
   function loadAnnotations() {
     return new Promise((resolve) => {
@@ -17,6 +18,38 @@
     return new Promise((resolve) => {
       chrome.storage.local.set({ [STORAGE_KEY]: annotations }, resolve);
     });
+  }
+
+  function loadConfig() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(CONFIG_KEY, (data) => resolve(data[CONFIG_KEY] || {}));
+    });
+  }
+
+  function saveConfig(config) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ [CONFIG_KEY]: config }, resolve);
+    });
+  }
+
+  // --- API ---
+  async function apiCall(path, method = 'GET', body = null) {
+    const config = await loadConfig();
+    if (!config.apiUrl || !config.token) throw new Error('API no configurada');
+    const url = config.apiUrl.replace(/\/$/, '') + path;
+    const opts = {
+      method,
+      headers: { 'Authorization': `Bearer ${config.token}`, 'Content-Type': 'application/json' },
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const resp = await fetch(url, opts);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    return data;
+  }
+
+  async function addAccountToTracker(username, accountType) {
+    return apiCall('/api/accounts', 'POST', { handle: username, account_type: accountType });
   }
 
   // --- Detect current reel info ---
@@ -105,9 +138,25 @@
   panel.innerHTML = `
     <button class="iga-toggle" title="Toggle panel">📝</button>
     <div class="iga-header">
-      <h2>Anotaciones</h2>
-      <span class="iga-reel-count" id="iga-count">0</span>
+      <h2>IG Tracker</h2>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="iga-status" id="iga-status" title="API status">⚪</span>
+        <button class="iga-config-btn" id="iga-config-btn" title="Configurar API">⚙️</button>
+      </div>
     </div>
+
+    <!-- Config panel (hidden by default) -->
+    <div class="iga-config" id="iga-config" style="display:none">
+      <div style="font-size:12px;font-weight:700;color:#888;margin-bottom:8px">Configuracion API</div>
+      <input class="iga-input" id="iga-api-url" placeholder="URL del servidor (ej: https://tu-dominio.com)" />
+      <input class="iga-input" id="iga-api-token" placeholder="Token JWT" type="password" />
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="iga-save-config-btn" id="iga-save-config">Conectar</button>
+        <button class="iga-test-config-btn" id="iga-test-config">Probar</button>
+      </div>
+      <div class="iga-config-msg" id="iga-config-msg"></div>
+    </div>
+
     <div class="iga-reel-info">
       <div class="iga-reel-user" id="iga-reel-user">Navega a un reel...</div>
       <div class="iga-reel-url" id="iga-reel-url"></div>
@@ -139,22 +188,82 @@
   `;
   document.body.appendChild(panel);
 
-
   // --- Elements ---
   const toggle = panel.querySelector('.iga-toggle');
   const noteInput = document.getElementById('iga-note');
   const saveBtn = document.getElementById('iga-save');
   const listEl = document.getElementById('iga-list');
-  const countEl = document.getElementById('iga-count');
   const userEl = document.getElementById('iga-reel-user');
   const urlEl = document.getElementById('iga-reel-url');
   const btnScrape = document.getElementById('iga-btn-scrape');
   const btnCompAI = document.getElementById('iga-btn-comp-ai');
   const btnComp = document.getElementById('iga-btn-comp');
+  const statusEl = document.getElementById('iga-status');
+  const configBtn = document.getElementById('iga-config-btn');
+  const configPanel = document.getElementById('iga-config');
+  const apiUrlInput = document.getElementById('iga-api-url');
+  const apiTokenInput = document.getElementById('iga-api-token');
+  const saveConfigBtn = document.getElementById('iga-save-config');
+  const testConfigBtn = document.getElementById('iga-test-config');
+  const configMsg = document.getElementById('iga-config-msg');
 
   // Stop scroll events on the panel from reaching Instagram
   panel.addEventListener('wheel', (e) => e.stopPropagation(), { passive: false });
   panel.addEventListener('scroll', (e) => e.stopPropagation());
+
+  // --- Config ---
+  let configVisible = false;
+  configBtn.addEventListener('click', () => {
+    configVisible = !configVisible;
+    configPanel.style.display = configVisible ? 'block' : 'none';
+  });
+
+  saveConfigBtn.addEventListener('click', async () => {
+    const apiUrl = apiUrlInput.value.trim();
+    const token = apiTokenInput.value.trim();
+    if (!apiUrl || !token) { configMsg.textContent = '❌ URL y Token requeridos'; configMsg.style.color = '#ef4444'; return; }
+    await saveConfig({ apiUrl, token });
+    configMsg.textContent = '✅ Configuracion guardada';
+    configMsg.style.color = '#4caf50';
+    checkApiStatus();
+  });
+
+  testConfigBtn.addEventListener('click', async () => {
+    configMsg.textContent = '⏳ Probando...';
+    configMsg.style.color = '#888';
+    try {
+      const data = await apiCall('/api/auth/me');
+      configMsg.textContent = `✅ Conectado como ${data.email || data.id}`;
+      configMsg.style.color = '#4caf50';
+      statusEl.textContent = '🟢';
+      statusEl.title = 'API conectada';
+    } catch (e) {
+      configMsg.textContent = `❌ ${e.message}`;
+      configMsg.style.color = '#ef4444';
+      statusEl.textContent = '🔴';
+      statusEl.title = 'API desconectada';
+    }
+  });
+
+  async function checkApiStatus() {
+    try {
+      const config = await loadConfig();
+      if (!config.apiUrl || !config.token) { statusEl.textContent = '⚪'; statusEl.title = 'No configurada'; return; }
+      await apiCall('/api/auth/me');
+      statusEl.textContent = '🟢';
+      statusEl.title = 'API conectada';
+    } catch (e) {
+      statusEl.textContent = '🔴';
+      statusEl.title = 'API desconectada';
+    }
+  }
+
+  // Load saved config into inputs
+  loadConfig().then(config => {
+    if (config.apiUrl) apiUrlInput.value = config.apiUrl;
+    if (config.token) apiTokenInput.value = config.token;
+    checkApiStatus();
+  });
 
   // --- Toggle ---
   let collapsed = false;
@@ -181,7 +290,17 @@
   noteInput.addEventListener('keyup', (e) => e.stopPropagation());
   noteInput.addEventListener('keypress', (e) => e.stopPropagation());
 
-  // --- Save annotation ---
+  // --- Show toast ---
+  function showToast(msg, type = 'ok') {
+    const toast = document.createElement('div');
+    toast.className = 'iga-toast';
+    toast.style.background = type === 'ok' ? '#4caf50' : type === 'err' ? '#ef4444' : '#ff9800';
+    toast.textContent = msg;
+    panel.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  // --- Save annotation + send to API ---
   async function doSave(tag, extraNote) {
     const info = getCurrentReelInfo();
     const note = extraNote || noteInput.value.trim();
@@ -194,9 +313,32 @@
       timestamp: new Date().toISOString(),
     };
 
+    // Save locally
     const annotations = await loadAnnotations();
     annotations.unshift(entry);
     await saveAnnotations(annotations);
+
+    // Send to API if connected
+    if (info.username && (tag === 'scrappear' || tag === 'competencia_ai' || tag === 'competencia')) {
+      const accountType = tag === 'scrappear' ? 'own' : tag === 'competencia_ai' ? 'competitor_ai' : 'competitor';
+      try {
+        await addAccountToTracker(info.username, accountType);
+        showToast(`@${info.username} agregada como ${tag === 'scrappear' ? 'propia' : tag === 'competencia_ai' ? 'comp. AI' : 'competencia'}`);
+        entry.synced = true;
+      } catch (e) {
+        if (e.message.includes('already exists')) {
+          showToast(`@${info.username} ya existe en el tracker`, 'warn');
+          entry.synced = true;
+        } else {
+          showToast(`Error: ${e.message}`, 'err');
+          entry.synced = false;
+        }
+      }
+      // Update entry sync status
+      const updated = await loadAnnotations();
+      const idx = updated.findIndex(a => a.id === entry.id);
+      if (idx >= 0) { updated[idx] = entry; await saveAnnotations(updated); }
+    }
 
     if (!extraNote) {
       noteInput.value = '';
@@ -215,23 +357,29 @@
 
   btnScrape.addEventListener('click', async () => {
     const info = getCurrentReelInfo();
-    if (!info.username) { flashButton(btnScrape); return; }
+    if (!info.username) { showToast('No se detecta usuario', 'err'); return; }
+    btnScrape.disabled = true;
     await doSave('scrappear');
     flashButton(btnScrape);
+    btnScrape.disabled = false;
   });
 
   btnCompAI.addEventListener('click', async () => {
     const info = getCurrentReelInfo();
-    if (!info.username) { flashButton(btnCompAI); return; }
+    if (!info.username) { showToast('No se detecta usuario', 'err'); return; }
+    btnCompAI.disabled = true;
     await doSave('competencia_ai');
     flashButton(btnCompAI);
+    btnCompAI.disabled = false;
   });
 
   btnComp.addEventListener('click', async () => {
     const info = getCurrentReelInfo();
-    if (!info.username) { flashButton(btnComp); return; }
+    if (!info.username) { showToast('No se detecta usuario', 'err'); return; }
+    btnComp.disabled = true;
     await doSave('competencia');
     flashButton(btnComp);
+    btnComp.disabled = false;
   });
 
   saveBtn.addEventListener('click', () => doSave('nota'));
@@ -246,7 +394,7 @@
 
   // --- Tag labels & colors ---
   const TAG_CONFIG = {
-    scrappear: { label: 'Scrappear', color: '#4caf50' },
+    scrappear: { label: 'Propia', color: '#4caf50' },
     competencia_ai: { label: 'Comp. AI', color: '#2196f3' },
     competencia: { label: 'Competencia', color: '#ff9800' },
     nota: { label: 'Nota', color: '#888' },
@@ -255,7 +403,6 @@
   // --- Render list ---
   async function renderList() {
     const annotations = await loadAnnotations();
-    countEl.textContent = annotations.length;
 
     const cards = annotations.map((a) => {
       const time = new Date(a.timestamp).toLocaleDateString('es-ES', {
@@ -263,10 +410,11 @@
       });
       const tagConf = TAG_CONFIG[a.tag] || TAG_CONFIG.nota;
       const tagBadge = `<span class="iga-tag" style="background:${tagConf.color}">${tagConf.label}</span>`;
+      const syncIcon = a.synced === true ? '<span title="Sincronizado" style="font-size:10px">✅</span>' : a.synced === false ? '<span title="Error sync" style="font-size:10px">⚠️</span>' : '';
       return `
         <div class="iga-card" data-id="${a.id}">
           <button class="iga-card-delete" data-id="${a.id}">x</button>
-          <div class="iga-card-header">${tagBadge} ${a.username ? `<span class="iga-card-user">@${escapeHtml(a.username)}</span>` : ''}</div>
+          <div class="iga-card-header">${tagBadge} ${syncIcon} ${a.username ? `<span class="iga-card-user">@${escapeHtml(a.username)}</span>` : ''}</div>
           ${a.note ? `<div class="iga-card-note">${escapeHtml(a.note)}</div>` : ''}
           <div class="iga-card-meta"><span>${time}</span></div>
         </div>
@@ -290,7 +438,7 @@
   function updateReelInfo() {
     const info = getCurrentReelInfo();
     userEl.textContent = info.username ? `@${info.username}` : 'Navega a un reel...';
-    urlEl.textContent = info.reelId ? `Reel: ${info.reelId}` : info.url;
+    urlEl.textContent = info.reelId ? `Reel: ${info.reelId}` : '';
   }
 
   let lastUrl = '';
@@ -302,7 +450,6 @@
       lastUrl = currentUrl;
       updateReelInfo();
     } else {
-      // URL didn't change but username might (IG updates DOM before URL)
       const info = getCurrentReelInfo();
       if (info.username && info.username !== lastUsername) {
         lastUsername = info.username;
@@ -311,10 +458,7 @@
     }
   }
 
-  // Fast polling
   setInterval(checkForChanges, 400);
-
-  // Also detect on scroll (reels switch on scroll)
   window.addEventListener('scroll', () => {
     setTimeout(checkForChanges, 200);
   }, { passive: true });
@@ -323,5 +467,5 @@
   updateReelInfo();
   renderList();
 
-  console.log('[IG Annotator] Panel loaded');
+  console.log('[IG Annotator] Panel loaded — API integration enabled');
 })();
