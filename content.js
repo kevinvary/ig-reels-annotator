@@ -37,34 +37,30 @@
     });
   }
 
-  // --- API ---
+  // --- API (routed through background.js to bypass mixed content) ---
+  function bgFetch(url, method = 'GET', headers = {}, body = null) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'api', url, method, headers, body }, (resp) => {
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+        if (!resp) return reject(new Error('No response from background'));
+        if (!resp.ok) return reject(new Error(resp.data?.error || `HTTP ${resp.status}`));
+        resolve(resp.data);
+      });
+    });
+  }
+
   async function apiCall(path, method = 'GET', body = null) {
     const config = await loadConfig();
     if (!config.token) throw new Error('No autenticado — ingresa tu clave de acceso');
     const url = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, '') + path;
-    const opts = {
-      method,
-      headers: { 'Authorization': `Bearer ${config.token}`, 'Content-Type': 'application/json' },
-    };
-    if (body) opts.body = JSON.stringify(body);
-    const resp = await fetch(url, opts);
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-    return data;
+    return bgFetch(url, method, { 'Authorization': `Bearer ${config.token}`, 'Content-Type': 'application/json' }, body);
   }
 
   // Login with access key (same key used in the web app)
   async function loginWithKey(key) {
     const config = await loadConfig();
     const url = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, '') + '/api/auth/login';
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || 'Clave invalida');
-    return data; // { token, user: { id, email, role } }
+    return bgFetch(url, 'POST', { 'Content-Type': 'application/json' }, { key });
   }
 
   async function addAccountToTracker(username, accountType) {
