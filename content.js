@@ -91,7 +91,7 @@
       username = profileFromUrl;
     }
 
-    // Method 1: Find visible video → scan parent for profile links (reels feed)
+    // Method 1: Find visible video → scan ALL parent containers for profile links
     if (!username) {
       const videos = document.querySelectorAll('video');
       let visibleVideo = null;
@@ -104,8 +104,9 @@
       }
 
       if (visibleVideo) {
+        // Scan up from video through parent containers
         let container = visibleVideo;
-        for (let i = 0; i < 15 && container && container !== document.body; i++) {
+        for (let i = 0; i < 20 && container && container !== document.body; i++) {
           container = container.parentElement;
           const links = container.querySelectorAll('a[href]');
           for (const link of links) {
@@ -114,39 +115,56 @@
           }
           if (username) break;
         }
+
+        // Also check siblings and nearby sections of the reel container
+        if (!username && container) {
+          const section = container.closest('section, article, [role="presentation"]') || container.parentElement;
+          if (section) {
+            const links = section.querySelectorAll('a[href]');
+            for (const link of links) {
+              const u = extractUsernameFromHref(link.getAttribute('href') || '');
+              if (u) { username = u; break; }
+            }
+          }
+        }
       }
     }
 
-    // Method 2: Find profile links in lower half of viewport
+    // Method 2: Find the Follow/Seguir button visible on screen → username is nearby
+    if (!username) {
+      const buttons = document.querySelectorAll('button');
+      for (const btn of buttons) {
+        const txt = btn.textContent?.trim();
+        if (txt === 'Seguir' || txt === 'Follow' || txt === 'Following' || txt === 'Siguiendo') {
+          const rect = btn.getBoundingClientRect();
+          if (rect.top > 0 && rect.top < window.innerHeight && rect.height > 0) {
+            // Scan nearby elements for a profile link
+            let scan = btn.parentElement;
+            for (let i = 0; i < 5 && scan; i++) {
+              const links = scan.querySelectorAll('a[href]');
+              for (const link of links) {
+                const u = extractUsernameFromHref(link.getAttribute('href') || '');
+                if (u) { username = u; break; }
+              }
+              if (username) break;
+              scan = scan.parentElement;
+            }
+          }
+          if (username) break;
+        }
+      }
+    }
+
+    // Method 3: Find any profile link in the lower 60% of viewport (reels overlay)
     if (!username) {
       const allLinks = document.querySelectorAll('a[href]');
       for (const link of allLinks) {
         const u = extractUsernameFromHref(link.getAttribute('href') || '');
         if (!u) continue;
         const rect = link.getBoundingClientRect();
-        if (rect.top > window.innerHeight * 0.5 && rect.bottom < window.innerHeight && rect.height > 0) {
+        if (rect.top > window.innerHeight * 0.4 && rect.bottom < window.innerHeight && rect.height > 0 && rect.width > 0) {
           username = u;
           break;
-        }
-      }
-    }
-
-    // Method 3: Find Follow/Seguir button and grab nearby username
-    if (!username) {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if (btn.textContent?.trim() === 'Seguir' || btn.textContent?.trim() === 'Follow') {
-          const rect = btn.getBoundingClientRect();
-          if (rect.top > window.innerHeight * 0.4) {
-            const parent = btn.parentElement;
-            if (parent) {
-              const link = parent.querySelector('a[href]') || parent.previousElementSibling?.querySelector('a[href]');
-              if (link) {
-                const u = extractUsernameFromHref(link.getAttribute('href') || '');
-                if (u) { username = u; break; }
-              }
-            }
-          }
         }
       }
     }
