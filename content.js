@@ -7,6 +7,7 @@
   // --- Storage ---
   const STORAGE_KEY = 'iga_annotations';
   const CONFIG_KEY = 'iga_config'; // { apiUrl, token }
+  const DEFAULT_API_URL = 'http://204.168.197.14:3001';
 
   function loadAnnotations() {
     return new Promise((resolve) => {
@@ -22,7 +23,11 @@
 
   function loadConfig() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(CONFIG_KEY, (data) => resolve(data[CONFIG_KEY] || {}));
+      chrome.storage.local.get(CONFIG_KEY, (data) => {
+        const config = data[CONFIG_KEY] || {};
+        if (!config.apiUrl) config.apiUrl = DEFAULT_API_URL;
+        resolve(config);
+      });
     });
   }
 
@@ -35,8 +40,8 @@
   // --- API ---
   async function apiCall(path, method = 'GET', body = null) {
     const config = await loadConfig();
-    if (!config.apiUrl || !config.token) throw new Error('API no configurada');
-    const url = config.apiUrl.replace(/\/$/, '') + path;
+    if (!config.token) throw new Error('No autenticado — ingresa tu clave de acceso');
+    const url = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, '') + path;
     const opts = {
       method,
       headers: { 'Authorization': `Bearer ${config.token}`, 'Content-Type': 'application/json' },
@@ -46,6 +51,20 @@
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
     return data;
+  }
+
+  // Login with access key (same key used in the web app)
+  async function loginWithKey(key) {
+    const config = await loadConfig();
+    const url = (config.apiUrl || DEFAULT_API_URL).replace(/\/$/, '') + '/api/auth/login';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Clave invalida');
+    return data; // { token, user: { id, email, role } }
   }
 
   async function addAccountToTracker(username, accountType) {
@@ -147,12 +166,16 @@
 
     <!-- Config panel (hidden by default) -->
     <div class="iga-config" id="iga-config" style="display:none">
-      <div style="font-size:12px;font-weight:700;color:#888;margin-bottom:8px">Configuracion API</div>
-      <input class="iga-input" id="iga-api-url" placeholder="URL del servidor (ej: https://tu-dominio.com)" />
-      <input class="iga-input" id="iga-api-token" placeholder="Token JWT" type="password" />
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <button class="iga-save-config-btn" id="iga-save-config">Conectar</button>
-        <button class="iga-test-config-btn" id="iga-test-config">Probar</button>
+      <div class="iga-config-logged-out" id="iga-logged-out">
+        <div style="font-size:12px;font-weight:700;color:#888;margin-bottom:8px">Clave de acceso</div>
+        <input class="iga-input" id="iga-access-key" placeholder="Ingresa tu clave de acceso..." type="password" />
+        <button class="iga-save-config-btn" id="iga-login-btn" style="width:100%;margin-top:6px">Entrar</button>
+      </div>
+      <div class="iga-config-logged-in" id="iga-logged-in" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;color:#4caf50;font-weight:600" id="iga-user-label">🟢 Conectado</span>
+          <button class="iga-test-config-btn" id="iga-logout-btn" style="font-size:11px;padding:4px 10px">Salir</button>
+        </div>
       </div>
       <div class="iga-config-msg" id="iga-config-msg"></div>
     </div>
@@ -201,10 +224,12 @@
   const statusEl = document.getElementById('iga-status');
   const configBtn = document.getElementById('iga-config-btn');
   const configPanel = document.getElementById('iga-config');
-  const apiUrlInput = document.getElementById('iga-api-url');
-  const apiTokenInput = document.getElementById('iga-api-token');
-  const saveConfigBtn = document.getElementById('iga-save-config');
-  const testConfigBtn = document.getElementById('iga-test-config');
+  const accessKeyInput = document.getElementById('iga-access-key');
+  const loginBtn = document.getElementById('iga-login-btn');
+  const logoutBtn = document.getElementById('iga-logout-btn');
+  const loggedOutEl = document.getElementById('iga-logged-out');
+  const loggedInEl = document.getElementById('iga-logged-in');
+  const userLabelEl = document.getElementById('iga-user-label');
   const configMsg = document.getElementById('iga-config-msg');
 
   // Stop scroll events on the panel from reaching Instagram
@@ -218,51 +243,66 @@
     configPanel.style.display = configVisible ? 'block' : 'none';
   });
 
-  saveConfigBtn.addEventListener('click', async () => {
-    const apiUrl = apiUrlInput.value.trim();
-    const token = apiTokenInput.value.trim();
-    if (!apiUrl || !token) { configMsg.textContent = '❌ URL y Token requeridos'; configMsg.style.color = '#ef4444'; return; }
-    await saveConfig({ apiUrl, token });
-    configMsg.textContent = '✅ Configuracion guardada';
-    configMsg.style.color = '#4caf50';
-    checkApiStatus();
-  });
+  function showLoggedIn(email) {
+    loggedOutEl.style.display = 'none';
+    loggedInEl.style.display = 'block';
+    userLabelEl.textContent = `🟢 ${email}`;
+    statusEl.textContent = '🟢';
+    statusEl.title = 'Conectado';
+    configMsg.textContent = '';
+  }
 
-  testConfigBtn.addEventListener('click', async () => {
-    configMsg.textContent = '⏳ Probando...';
-    configMsg.style.color = '#888';
+  function showLoggedOut() {
+    loggedOutEl.style.display = 'block';
+    loggedInEl.style.display = 'none';
+    statusEl.textContent = '⚪';
+    statusEl.title = 'No autenticado';
+  }
+
+  loginBtn.addEventListener('click', async () => {
+    const key = accessKeyInput.value.trim();
+    if (!key) { configMsg.textContent = '❌ Ingresa tu clave'; configMsg.style.color = '#ef4444'; return; }
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Conectando...';
+    configMsg.textContent = '';
     try {
-      const data = await apiCall('/api/auth/me');
-      configMsg.textContent = `✅ Conectado como ${data.email || data.id}`;
-      configMsg.style.color = '#4caf50';
-      statusEl.textContent = '🟢';
-      statusEl.title = 'API conectada';
+      const data = await loginWithKey(key);
+      await saveConfig({ apiUrl: DEFAULT_API_URL, token: data.token, email: data.user?.email });
+      showLoggedIn(data.user?.email || 'Usuario');
+      accessKeyInput.value = '';
     } catch (e) {
       configMsg.textContent = `❌ ${e.message}`;
       configMsg.style.color = '#ef4444';
-      statusEl.textContent = '🔴';
-      statusEl.title = 'API desconectada';
     }
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Entrar';
   });
 
-  async function checkApiStatus() {
-    try {
-      const config = await loadConfig();
-      if (!config.apiUrl || !config.token) { statusEl.textContent = '⚪'; statusEl.title = 'No configurada'; return; }
-      await apiCall('/api/auth/me');
-      statusEl.textContent = '🟢';
-      statusEl.title = 'API conectada';
-    } catch (e) {
-      statusEl.textContent = '🔴';
-      statusEl.title = 'API desconectada';
-    }
-  }
+  accessKeyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); loginBtn.click(); }
+    e.stopPropagation();
+  });
+  accessKeyInput.addEventListener('keyup', (e) => e.stopPropagation());
 
-  // Load saved config into inputs
-  loadConfig().then(config => {
-    if (config.apiUrl) apiUrlInput.value = config.apiUrl;
-    if (config.token) apiTokenInput.value = config.token;
-    checkApiStatus();
+  logoutBtn.addEventListener('click', async () => {
+    await saveConfig({});
+    showLoggedOut();
+    configMsg.textContent = '👋 Sesion cerrada';
+    configMsg.style.color = '#888';
+  });
+
+  // Check saved session on load
+  loadConfig().then(async (config) => {
+    if (config.token) {
+      try {
+        await apiCall('/api/auth/me');
+        showLoggedIn(config.email || 'Usuario');
+      } catch (e) {
+        showLoggedOut();
+      }
+    } else {
+      showLoggedOut();
+    }
   });
 
   // --- Toggle ---
