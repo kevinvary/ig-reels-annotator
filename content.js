@@ -70,11 +70,47 @@
   // --- Detect current reel info ---
   const RESERVED_PATHS = /^\/(reels?|explore|direct|accounts|p|stories|tags|locations|api|static)\//;
   const PROFILE_HREF = /^\/([a-zA-Z0-9_.]{1,30})\/$/;
+  const USERNAME_REGEX = /^[a-zA-Z0-9_.]{2,30}$/;
 
   function extractUsernameFromHref(href) {
     const m = href.match(PROFILE_HREF);
     if (m && !RESERVED_PATHS.test(href)) return m[1];
     return null;
+  }
+
+  // Find the most centered visible video (the one the user is actually watching)
+  function findActiveVideo() {
+    const videos = document.querySelectorAll('video');
+    let best = null;
+    let bestDist = Infinity;
+    const centerY = window.innerHeight / 2;
+    for (const v of videos) {
+      const rect = v.getBoundingClientRect();
+      if (rect.height < 200 || rect.bottom < 0 || rect.top > window.innerHeight) continue;
+      const mid = (rect.top + rect.bottom) / 2;
+      const dist = Math.abs(mid - centerY);
+      if (dist < bestDist) { bestDist = dist; best = v; }
+    }
+    return best;
+  }
+
+  // Find the Follow/Seguir button closest to the active video
+  function findFollowButtonNearVideo(video) {
+    if (!video) return null;
+    const videoRect = video.getBoundingClientRect();
+    const buttons = document.querySelectorAll('button');
+    let best = null;
+    let bestDist = Infinity;
+    for (const btn of buttons) {
+      const txt = btn.textContent?.trim();
+      if (txt !== 'Seguir' && txt !== 'Follow') continue;
+      const rect = btn.getBoundingClientRect();
+      if (rect.height === 0 || rect.top > window.innerHeight || rect.bottom < 0) continue;
+      // Must be within or below the video area
+      const dist = Math.abs(rect.top - videoRect.bottom);
+      if (dist < bestDist) { bestDist = dist; best = btn; }
+    }
+    return best;
   }
 
   function getCurrentReelInfo() {
@@ -91,117 +127,67 @@
       username = profileFromUrl;
     }
 
-    // Method 1: Find visible video → scan ALL parent containers for profile links
-    if (!username) {
-      const videos = document.querySelectorAll('video');
-      let visibleVideo = null;
-      for (const v of videos) {
-        const rect = v.getBoundingClientRect();
-        if (rect.top < window.innerHeight && rect.bottom > 0 && rect.height > 200) {
-          visibleVideo = v;
-          break;
-        }
-      }
+    // For reels: find the active video first, then find username near IT specifically
+    const activeVideo = !username ? findActiveVideo() : null;
 
-      if (visibleVideo) {
-        // Scan up from video through parent containers
-        let container = visibleVideo;
-        for (let i = 0; i < 20 && container && container !== document.body; i++) {
-          container = container.parentElement;
-          const links = container.querySelectorAll('a[href]');
+    // Method 1: Find Follow/Seguir button near the active video → get username from nearby span/link
+    if (!username && activeVideo) {
+      const followBtn = findFollowButtonNearVideo(activeVideo);
+      if (followBtn) {
+        // Scan parent containers of the Follow button for username
+        let scan = followBtn.parentElement;
+        for (let i = 0; i < 6 && scan; i++) {
+          // Check links first (href is most reliable)
+          const links = scan.querySelectorAll('a[href]');
           for (const link of links) {
             const u = extractUsernameFromHref(link.getAttribute('href') || '');
             if (u) { username = u; break; }
           }
           if (username) break;
-        }
 
-        // Also check siblings and nearby sections of the reel container
-        if (!username && container) {
-          const section = container.closest('section, article, [role="presentation"]') || container.parentElement;
-          if (section) {
-            const links = section.querySelectorAll('a[href]');
-            for (const link of links) {
-              const u = extractUsernameFromHref(link.getAttribute('href') || '');
-              if (u) { username = u; break; }
-            }
-          }
-        }
-      }
-    }
-
-    // Method 2: Find the Follow/Seguir button visible on screen → username is nearby
-    if (!username) {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        const txt = btn.textContent?.trim();
-        if (txt === 'Seguir' || txt === 'Follow' || txt === 'Following' || txt === 'Siguiendo') {
-          const rect = btn.getBoundingClientRect();
-          if (rect.top > 0 && rect.top < window.innerHeight && rect.height > 0) {
-            // Scan nearby elements for a profile link
-            let scan = btn.parentElement;
-            for (let i = 0; i < 5 && scan; i++) {
-              const links = scan.querySelectorAll('a[href]');
-              for (const link of links) {
-                const u = extractUsernameFromHref(link.getAttribute('href') || '');
-                if (u) { username = u; break; }
+          // Check spans (reels feed shows username as plain text)
+          const spans = scan.querySelectorAll('span');
+          for (const span of spans) {
+            const t = span.textContent?.trim();
+            if (t && USERNAME_REGEX.test(t) && t !== 'Seguir' && t !== 'Follow') {
+              // Make sure this span is near the Follow button vertically
+              const sr = span.getBoundingClientRect();
+              const fr = followBtn.getBoundingClientRect();
+              if (Math.abs(sr.top - fr.top) < 50 && sr.height > 0) {
+                username = t;
+                break;
               }
-              if (username) break;
-              scan = scan.parentElement;
             }
           }
           if (username) break;
+          scan = scan.parentElement;
         }
       }
     }
 
-    // Method 3: Find any profile link in the lower 60% of viewport (reels overlay)
-    if (!username) {
-      const allLinks = document.querySelectorAll('a[href]');
-      for (const link of allLinks) {
-        const u = extractUsernameFromHref(link.getAttribute('href') || '');
-        if (!u) continue;
-        const rect = link.getBoundingClientRect();
-        if (rect.top > window.innerHeight * 0.4 && rect.bottom < window.innerHeight && rect.height > 0 && rect.width > 0) {
-          username = u;
-          break;
-        }
-      }
-    }
-
-    // Method 4: Find username span near Follow/Seguir button (reels feed — username is plain text, not a link)
-    if (!username) {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        const txt = btn.textContent?.trim();
-        if (txt === 'Seguir' || txt === 'Follow') {
-          const rect = btn.getBoundingClientRect();
-          if (rect.top > 0 && rect.top < window.innerHeight) {
-            // Username span is a sibling or nearby element to the Follow button
-            let scan = btn.parentElement;
-            for (let i = 0; i < 5 && scan; i++) {
-              const spans = scan.querySelectorAll('span');
-              for (const span of spans) {
-                const t = span.textContent?.trim();
-                // Username pattern: 1-30 chars, letters/numbers/dots/underscores, no spaces
-                if (t && t.length >= 2 && t.length <= 30 && /^[a-zA-Z0-9_.]+$/.test(t) && t !== txt) {
-                  const sr = span.getBoundingClientRect();
-                  if (sr.top > 0 && sr.top < window.innerHeight && sr.height > 0) {
-                    username = t;
-                    break;
-                  }
-                }
-              }
-              if (username) break;
-              scan = scan.parentElement;
+    // Method 2: Scan the active video's parent for profile links (single reel page)
+    if (!username && activeVideo) {
+      let container = activeVideo;
+      for (let i = 0; i < 15 && container && container !== document.body; i++) {
+        container = container.parentElement;
+        const links = container.querySelectorAll('a[href]');
+        for (const link of links) {
+          const u = extractUsernameFromHref(link.getAttribute('href') || '');
+          if (u) {
+            // Verify this link is within the video's vertical bounds (not from another reel)
+            const lr = link.getBoundingClientRect();
+            const vr = activeVideo.getBoundingClientRect();
+            if (lr.top >= vr.top - 100 && lr.top <= vr.bottom + 100) {
+              username = u;
+              break;
             }
           }
-          if (username) break;
         }
+        if (username) break;
       }
     }
 
-    // Clean username: remove @ prefix if present
+    // Clean username
     username = username.replace(/^@/, '').trim();
 
     return { url, reelId, username };
