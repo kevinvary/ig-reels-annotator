@@ -169,6 +169,38 @@
       }
     }
 
+    // Method 4: Find username span near Follow/Seguir button (reels feed — username is plain text, not a link)
+    if (!username) {
+      const buttons = document.querySelectorAll('button');
+      for (const btn of buttons) {
+        const txt = btn.textContent?.trim();
+        if (txt === 'Seguir' || txt === 'Follow') {
+          const rect = btn.getBoundingClientRect();
+          if (rect.top > 0 && rect.top < window.innerHeight) {
+            // Username span is a sibling or nearby element to the Follow button
+            let scan = btn.parentElement;
+            for (let i = 0; i < 5 && scan; i++) {
+              const spans = scan.querySelectorAll('span');
+              for (const span of spans) {
+                const t = span.textContent?.trim();
+                // Username pattern: 1-30 chars, letters/numbers/dots/underscores, no spaces
+                if (t && t.length >= 2 && t.length <= 30 && /^[a-zA-Z0-9_.]+$/.test(t) && t !== txt) {
+                  const sr = span.getBoundingClientRect();
+                  if (sr.top > 0 && sr.top < window.innerHeight && sr.height > 0) {
+                    username = t;
+                    break;
+                  }
+                }
+              }
+              if (username) break;
+              scan = scan.parentElement;
+            }
+          }
+          if (username) break;
+        }
+      }
+    }
+
     // Clean username: remove @ prefix if present
     username = username.replace(/^@/, '').trim();
 
