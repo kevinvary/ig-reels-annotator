@@ -68,13 +68,17 @@
   }
 
   // --- Detect current reel info ---
-  const RESERVED_PATHS = /^\/(reels?|explore|direct|accounts|p|stories|tags|locations|api|static)\//;
-  const PROFILE_HREF = /^\/([a-zA-Z0-9_.]{1,30})\/$/;
+  const RESERVED_NAMES = /^(reels?|explore|direct|accounts|p|stories|tags|locations|api|static)$/;
   const USERNAME_REGEX = /^[a-zA-Z0-9_.]{2,30}$/;
 
+  // Extract username from href — supports /user/, /user/reels/, /user/reel/ID
   function extractUsernameFromHref(href) {
-    const m = href.match(PROFILE_HREF);
-    if (m && !RESERVED_PATHS.test(href)) return m[1];
+    // /username/reels/ pattern (used in reels feed)
+    const reelsMatch = href.match(/^\/([a-zA-Z0-9_.]{1,30})\/reels?\//);
+    if (reelsMatch && !RESERVED_NAMES.test(reelsMatch[1])) return reelsMatch[1];
+    // /username/ pattern (profile links)
+    const profileMatch = href.match(/^\/([a-zA-Z0-9_.]{1,30})\/$/);
+    if (profileMatch && !RESERVED_NAMES.test(profileMatch[1])) return profileMatch[1];
     return null;
   }
 
@@ -165,7 +169,27 @@
       }
     }
 
-    // Method 2: Scan the active video's parent for profile links (single reel page)
+    // Method 2: Find /username/reels/ links near the active video (main reels feed pattern)
+    if (!username && activeVideo) {
+      const vr = activeVideo.getBoundingClientRect();
+      const allLinks = document.querySelectorAll('a[href*="/reels/"]');
+      let bestLink = null;
+      let bestDist = Infinity;
+      for (const link of allLinks) {
+        const href = link.getAttribute('href') || '';
+        const m = href.match(/^\/([a-zA-Z0-9_.]{1,30})\/reels\/$/);
+        if (!m || RESERVED_NAMES.test(m[1])) continue;
+        const lr = link.getBoundingClientRect();
+        if (lr.height === 0 || lr.left < 100) continue; // Skip sidebar
+        // Must be near the video vertically
+        if (lr.top >= vr.top - 50 && lr.top <= vr.bottom + 50) {
+          const dist = Math.abs(lr.top - vr.bottom);
+          if (dist < bestDist) { bestDist = dist; bestLink = link; username = m[1]; }
+        }
+      }
+    }
+
+    // Method 3: Scan the active video's parent tree for any profile links
     if (!username && activeVideo) {
       let container = activeVideo;
       for (let i = 0; i < 15 && container && container !== document.body; i++) {
@@ -174,10 +198,9 @@
         for (const link of links) {
           const u = extractUsernameFromHref(link.getAttribute('href') || '');
           if (u) {
-            // Verify this link is within the video's vertical bounds (not from another reel)
             const lr = link.getBoundingClientRect();
             const vr = activeVideo.getBoundingClientRect();
-            if (lr.top >= vr.top - 100 && lr.top <= vr.bottom + 100) {
+            if (lr.top >= vr.top - 100 && lr.top <= vr.bottom + 100 && lr.left > 100) {
               username = u;
               break;
             }
