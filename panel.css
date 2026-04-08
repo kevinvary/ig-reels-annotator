@@ -241,6 +241,9 @@ body.iga-panel-collapsed {
 .iga-btn-comp { border-color: #ff9800; }
 .iga-btn-comp:hover { background: rgba(255,152,0,0.15); }
 
+.iga-btn-save-reel { border-color: #a855f7; }
+.iga-btn-save-reel:hover { background: rgba(168,85,247,0.15); }
+
 .iga-btn-flash {
   animation: iga-flash 0.6s ease;
 }

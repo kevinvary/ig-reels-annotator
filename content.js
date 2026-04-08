@@ -67,6 +67,10 @@
     return apiCall('/api/accounts', 'POST', { handle: username, account_type: accountType });
   }
 
+  async function saveReelToQueue(reelUrl, reelId, username, note) {
+    return apiCall('/api/saved-queue/quick-add', 'POST', { reel_url: reelUrl, reel_id: reelId, username, note });
+  }
+
   // --- Detect current reel info ---
   const RESERVED_NAMES = /^(reels?|explore|direct|accounts|p|stories|tags|locations|api|static)$/;
   const USERNAME_REGEX = /^[a-zA-Z0-9_.]{2,30}$/;
@@ -263,6 +267,12 @@
         <span>Competencia</span>
       </button>
     </div>
+    <div class="iga-quick-actions" style="padding-top:0">
+      <button class="iga-action-btn iga-btn-save-reel" id="iga-btn-save-reel" style="flex:1;border-color:#a855f7">
+        <span class="iga-btn-icon">📌</span>
+        <span>Guardar reel en cola</span>
+      </button>
+    </div>
     <div class="iga-input-area">
       <textarea class="iga-textarea" id="iga-note" placeholder="Nota adicional (opcional)..."></textarea>
       <div class="iga-input-row">
@@ -286,6 +296,7 @@
   const btnScrape = document.getElementById('iga-btn-scrape');
   const btnCompAI = document.getElementById('iga-btn-comp-ai');
   const btnComp = document.getElementById('iga-btn-comp');
+  const btnSaveReel = document.getElementById('iga-btn-save-reel');
   const statusEl = document.getElementById('iga-status');
   const configBtn = document.getElementById('iga-config-btn');
   const configPanel = document.getElementById('iga-config');
@@ -485,6 +496,23 @@
     await doSave('competencia');
     flashButton(btnComp);
     btnComp.disabled = false;
+  });
+
+  btnSaveReel.addEventListener('click', async () => {
+    const info = getCurrentReelInfo();
+    if (!info.reelId) { showToast('No se detecta reel', 'err'); return; }
+    btnSaveReel.disabled = true;
+    try {
+      const reelUrl = `https://www.instagram.com/reel/${info.reelId}/`;
+      const note = noteInput.value.trim();
+      await saveReelToQueue(reelUrl, info.reelId, info.username, note);
+      showToast(`Reel guardado en cola`);
+      flashButton(btnSaveReel);
+      if (note) { noteInput.value = ''; saveBtn.disabled = true; }
+    } catch (e) {
+      showToast(`Error: ${e.message}`, 'err');
+    }
+    btnSaveReel.disabled = false;
   });
 
   saveBtn.addEventListener('click', () => doSave('nota'));
