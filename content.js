@@ -68,6 +68,15 @@
   }
 
   // --- Detect current reel info ---
+  const RESERVED_PATHS = /^\/(reels?|explore|direct|accounts|p|stories|tags|locations|api|static)\//;
+  const PROFILE_HREF = /^\/([a-zA-Z0-9_.]{1,30})\/$/;
+
+  function extractUsernameFromHref(href) {
+    const m = href.match(PROFILE_HREF);
+    if (m && !RESERVED_PATHS.test(href)) return m[1];
+    return null;
+  }
+
   function getCurrentReelInfo() {
     const url = window.location.href;
     const reelMatch = url.match(/\/reels?\/([^/?]+)/);
@@ -75,53 +84,54 @@
 
     let username = '';
 
-    const videos = document.querySelectorAll('video');
-    let visibleVideo = null;
-    for (const v of videos) {
-      const rect = v.getBoundingClientRect();
-      if (rect.top < window.innerHeight && rect.bottom > 0 && rect.height > 200) {
-        visibleVideo = v;
-        break;
-      }
+    // Method 0: If on a profile page (instagram.com/username/), grab from URL
+    const urlPath = new URL(url).pathname;
+    const profileFromUrl = extractUsernameFromHref(urlPath);
+    if (profileFromUrl && !reelId) {
+      username = profileFromUrl;
     }
 
-    if (visibleVideo) {
-      let container = visibleVideo;
-      for (let i = 0; i < 15 && container && container !== document.body; i++) {
-        container = container.parentElement;
-        const links = container.querySelectorAll('a[href]');
-        for (const link of links) {
-          const href = link.getAttribute('href') || '';
-          if (href.match(/^\/[a-zA-Z0-9_.]{1,30}\/$/) &&
-              !href.match(/^\/(reels?|explore|direct|accounts|p|stories)\//)) {
-            const text = link.textContent?.trim();
-            if (text && text.length > 0 && text.length < 30) {
-              username = text.split('\n')[0].trim();
-              break;
-            }
-          }
+    // Method 1: Find visible video → scan parent for profile links (reels feed)
+    if (!username) {
+      const videos = document.querySelectorAll('video');
+      let visibleVideo = null;
+      for (const v of videos) {
+        const rect = v.getBoundingClientRect();
+        if (rect.top < window.innerHeight && rect.bottom > 0 && rect.height > 200) {
+          visibleVideo = v;
+          break;
         }
-        if (username) break;
+      }
+
+      if (visibleVideo) {
+        let container = visibleVideo;
+        for (let i = 0; i < 15 && container && container !== document.body; i++) {
+          container = container.parentElement;
+          const links = container.querySelectorAll('a[href]');
+          for (const link of links) {
+            const u = extractUsernameFromHref(link.getAttribute('href') || '');
+            if (u) { username = u; break; }
+          }
+          if (username) break;
+        }
       }
     }
 
+    // Method 2: Find profile links in lower half of viewport
     if (!username) {
       const allLinks = document.querySelectorAll('a[href]');
       for (const link of allLinks) {
-        const href = link.getAttribute('href') || '';
-        if (!href.match(/^\/[a-zA-Z0-9_.]{1,30}\/$/)) continue;
-        if (href.match(/^\/(reels?|explore|direct|accounts|p|stories)\//)) continue;
+        const u = extractUsernameFromHref(link.getAttribute('href') || '');
+        if (!u) continue;
         const rect = link.getBoundingClientRect();
         if (rect.top > window.innerHeight * 0.5 && rect.bottom < window.innerHeight && rect.height > 0) {
-          const text = link.textContent?.trim();
-          if (text && text.length > 0 && text.length < 30) {
-            username = text.split('\n')[0].trim();
-            break;
-          }
+          username = u;
+          break;
         }
       }
     }
 
+    // Method 3: Find Follow/Seguir button and grab nearby username
     if (!username) {
       const buttons = document.querySelectorAll('button');
       for (const btn of buttons) {
@@ -132,17 +142,17 @@
             if (parent) {
               const link = parent.querySelector('a[href]') || parent.previousElementSibling?.querySelector('a[href]');
               if (link) {
-                const text = link.textContent?.trim();
-                if (text && text.length < 30) {
-                  username = text.split('\n')[0].trim();
-                  break;
-                }
+                const u = extractUsernameFromHref(link.getAttribute('href') || '');
+                if (u) { username = u; break; }
               }
             }
           }
         }
       }
     }
+
+    // Clean username: remove @ prefix if present
+    username = username.replace(/^@/, '').trim();
 
     return { url, reelId, username };
   }
