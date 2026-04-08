@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "IG Reels Annotator",
+  "version": "1.0.0",
+  "description": "Panel de anotaciones para Instagram Reels",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

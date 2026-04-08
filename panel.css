@@ -1,0 +1,351 @@
+/* IG Reels Annotator - Side Panel */
+#ig-annotator-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 340px;
+  height: 100vh;
+  background: #0a0a0a;
+  border-left: 1px solid #262626;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #e0e0e0;
+  transition: transform 0.3s ease;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.5);
+  overscroll-behavior: contain;
+}
+
+/* Push Instagram content to make room for panel */
+body.iga-panel-open {
+  margin-right: 340px !important;
+  width: calc(100% - 340px) !important;
+  overflow-x: hidden !important;
+}
+
+body.iga-panel-collapsed {
+  margin-right: 40px !important;
+  width: calc(100% - 40px) !important;
+}
+
+#ig-annotator-panel.collapsed {
+  transform: translateX(320px);
+}
+
+#ig-annotator-panel * {
+  box-sizing: border-box;
+}
+
+/* Toggle button */
+.iga-toggle {
+  position: absolute;
+  left: -40px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 48px;
+  background: #0a0a0a;
+  border: 1px solid #262626;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.iga-toggle:hover {
+  background: #1a1a1a;
+}
+
+/* Header */
+.iga-header {
+  padding: 16px;
+  border-bottom: 1px solid #262626;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.iga-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.iga-reel-count {
+  font-size: 12px;
+  color: #888;
+  background: #1a1a1a;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Current reel info */
+.iga-reel-info {
+  padding: 12px 16px;
+  border-bottom: 1px solid #1a1a1a;
+  flex-shrink: 0;
+}
+
+.iga-reel-user {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e1306c;
+  margin-bottom: 4px;
+}
+
+.iga-reel-url {
+  font-size: 11px;
+  color: #555;
+  word-break: break-all;
+}
+
+/* Quick action buttons */
+.iga-quick-actions {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #262626;
+  flex-shrink: 0;
+}
+
+.iga-action-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 10px;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.iga-action-btn:hover {
+  background: #222;
+}
+
+.iga-action-btn:active {
+  transform: scale(0.96);
+}
+
+.iga-btn-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.iga-btn-scrape { border-color: #4caf50; }
+.iga-btn-scrape:hover { background: rgba(76,175,80,0.15); }
+
+.iga-btn-comp-ai { border-color: #2196f3; }
+.iga-btn-comp-ai:hover { background: rgba(33,150,243,0.15); }
+
+.iga-btn-comp { border-color: #ff9800; }
+.iga-btn-comp:hover { background: rgba(255,152,0,0.15); }
+
+.iga-btn-flash {
+  animation: iga-flash 0.6s ease;
+}
+
+@keyframes iga-flash {
+  0% { transform: scale(0.96); }
+  30% { transform: scale(1.05); background: rgba(255,255,255,0.15); }
+  100% { transform: scale(1); }
+}
+
+/* Tag badges in cards */
+.iga-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.iga-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* Note input */
+.iga-input-area {
+  padding: 12px 16px;
+  border-bottom: 1px solid #262626;
+  flex-shrink: 0;
+}
+
+.iga-textarea {
+  width: 100%;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #e0e0e0;
+  padding: 10px 12px;
+  font-size: 13px;
+  resize: none;
+  height: 70px;
+  outline: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.iga-textarea:focus {
+  border-color: #e1306c;
+}
+
+.iga-textarea::placeholder {
+  color: #555;
+}
+
+.iga-input-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  gap: 8px;
+  align-items: center;
+}
+
+.iga-shortcut-hint {
+  font-size: 11px;
+  color: #555;
+}
+
+.iga-save-btn {
+  background: linear-gradient(135deg, #e1306c, #c13584);
+  border: none;
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.iga-save-btn:hover {
+  opacity: 0.9;
+}
+
+.iga-save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Annotations list */
+.iga-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.iga-list-header {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 10px;
+}
+
+.iga-card {
+  background: #1a1a1a;
+  border: 1px solid #222;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.iga-card-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #ddd;
+  white-space: pre-wrap;
+  margin-bottom: 6px;
+  padding-right: 20px;
+}
+
+.iga-card-meta {
+  font-size: 11px;
+  color: #555;
+  display: flex;
+  gap: 8px;
+}
+
+.iga-card-user {
+  color: #888;
+  font-weight: 500;
+}
+
+.iga-card-delete {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #444;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.iga-card-delete:hover {
+  color: #e1306c;
+  background: #222;
+}
+
+/* Nav arrows injected next to reels */
+.iga-nav-arrows {
+  position: fixed;
+  right: 380px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 99998;
+}
+
+#ig-annotator-panel.collapsed ~ .iga-nav-arrows,
+.iga-nav-arrows.shifted {
+  right: 60px;
+}
+
+.iga-arrow-btn {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s;
+}
+
+.iga-arrow-btn:hover {
+  background: rgba(255,255,255,0.22);
+}
+
+/* Scrollbar */
+.iga-list::-webkit-scrollbar { width: 5px; }
+.iga-list::-webkit-scrollbar-track { background: transparent; }
+.iga-list::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
